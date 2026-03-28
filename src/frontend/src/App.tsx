@@ -1501,6 +1501,35 @@ function StudentsPanel({
   actor: import("./backend.d").backendInterface;
   onReload: () => void;
 }) {
+  const [linkPrincipalOpen, setLinkPrincipalOpen] = useState(false);
+  const [linkPrincipalStudent, setLinkPrincipalStudent] =
+    useState<Student | null>(null);
+  const [linkPrincipalInput, setLinkPrincipalInput] = useState("");
+  const [linkPrincipalSaving, setLinkPrincipalSaving] = useState(false);
+
+  function openLinkPrincipal(s: Student) {
+    setLinkPrincipalStudent(s);
+    setLinkPrincipalInput("");
+    setLinkPrincipalOpen(true);
+  }
+
+  async function handleLinkPrincipal() {
+    if (!actor || !linkPrincipalStudent || !linkPrincipalInput.trim()) return;
+    setLinkPrincipalSaving(true);
+    try {
+      const { Principal } = await import("@icp-sdk/core/principal");
+      const principalObj = Principal.fromText(linkPrincipalInput.trim());
+      await actor.linkStudentPrincipal(linkPrincipalStudent.id, principalObj);
+      toast.success("Student login linked!");
+      setLinkPrincipalOpen(false);
+    } catch (e) {
+      console.error(e);
+      toast.error("Failed to link. Check the Principal ID format.");
+    } finally {
+      setLinkPrincipalSaving(false);
+    }
+  }
+
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState<Student | null>(null);
   const [name, setName] = useState("");
@@ -1608,13 +1637,21 @@ function StudentsPanel({
                   <TableCell>{s.admissionNumber}</TableCell>
                   <TableCell>{s.studentClass}</TableCell>
                   <TableCell>
-                    <div className="flex gap-2">
+                    <div className="flex gap-2 flex-wrap">
                       <Button
                         size="sm"
                         variant="outline"
                         onClick={() => openEdit(s)}
                       >
                         Edit
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="text-blue-700 border-blue-300 hover:bg-blue-50"
+                        onClick={() => openLinkPrincipal(s)}
+                      >
+                        Link Login
                       </Button>
                       <Button
                         size="sm"
@@ -1631,6 +1668,54 @@ function StudentsPanel({
           </Table>
         </CardContent>
       </Card>
+
+      <Dialog open={linkPrincipalOpen} onOpenChange={setLinkPrincipalOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Link Student Login</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3">
+            <p className="text-sm text-muted-foreground">
+              Linking a Principal ID allows the student to log in and see their
+              data.
+            </p>
+            {linkPrincipalStudent && (
+              <div className="p-2 bg-muted rounded text-sm">
+                Student: <strong>{linkPrincipalStudent.name}</strong> (
+                {linkPrincipalStudent.admissionNumber})
+              </div>
+            )}
+            <div>
+              <Label>Student's Principal ID</Label>
+              <Input
+                value={linkPrincipalInput}
+                onChange={(e) => setLinkPrincipalInput(e.target.value)}
+                placeholder="e.g. 2vxsx-fae"
+                data-ocid="student.link_principal.input"
+              />
+              <p className="text-xs text-muted-foreground mt-1">
+                Ask the student to share their Principal ID from their login
+                screen.
+              </p>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setLinkPrincipalOpen(false)}
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={handleLinkPrincipal}
+              disabled={linkPrincipalSaving}
+              className="bg-[#1a4d2e] text-white hover:bg-[#1a4d2e]/90"
+            >
+              {linkPrincipalSaving ? "Linking..." : "Link Account"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent>

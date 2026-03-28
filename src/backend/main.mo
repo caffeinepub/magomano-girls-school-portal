@@ -773,6 +773,31 @@ actor {
     };
   };
 
+  // Get the calling student's own registration request (if any)
+  public query ({ caller }) func getMyRegistrationRequest() : async ?RegistrationRequest {
+    if (not (AccessControl.hasPermission(accessControlState, caller, #user))) {
+      Runtime.trap("Unauthorized: Authentication required");
+    };
+    var found : ?RegistrationRequest = null;
+    for ((_, req) in registrationRequests.entries()) {
+      if (req.callerPrincipal == caller) {
+        found := ?req;
+      };
+    };
+    found
+  };
+
+  // Admin links a Principal ID to an existing student record
+  public shared ({ caller }) func linkStudentPrincipal(studentId : Nat, studentPrincipal : Principal) : async () {
+    if (not isAdminOrTeacher(caller)) {
+      Runtime.trap("Unauthorized: Only admins can link principals");
+    };
+    switch (students.get(studentId)) {
+      case (null) { Runtime.trap("Student not found") };
+      case (?_) { studentPrincipals.add(studentId, studentPrincipal) };
+    };
+  };
+
   // ---- Parent Link Requests ----
 
   public shared ({ caller }) func submitParentLinkRequest(admissionNumber : Text, studentName : Text, requestDate : Text) : async Nat {

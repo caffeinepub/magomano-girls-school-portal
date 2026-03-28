@@ -153,4 +153,6 @@ export interface backendInterface {
     getAllParentLinkRequests(): Promise<Array<ParentLinkRequest>>;
     approveParentLinkRequest(requestId: bigint): Promise<void>;
     rejectParentLinkRequest(requestId: bigint): Promise<void>;
+    getMyRegistrationRequest(): Promise<RegistrationRequest | null>;
+    linkStudentPrincipal(studentId: bigint, studentPrincipal: Principal): Promise<void>;
 }
