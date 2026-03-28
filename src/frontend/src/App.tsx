@@ -28,6 +28,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Textarea } from "@/components/ui/textarea";
+import { Principal } from "@icp-sdk/core/principal";
 import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
 import type {
@@ -36,6 +37,8 @@ import type {
   CBCSubject,
   FeePayment,
   FeeStructure,
+  ParentLinkRequest,
+  RegistrationRequest,
   SchoolEvent,
   Student,
   UserProfile,
@@ -56,7 +59,9 @@ type Tab =
   | "admin-fees"
   | "admin-events"
   | "admin-announcements"
-  | "users";
+  | "users"
+  | "registration-requests"
+  | "parent-link-requests";
 
 function cbcLevelColor(level: string) {
   const l = level.toLowerCase();
@@ -477,6 +482,8 @@ const adminNavItems = [
   { id: "admin-fees" as Tab, label: "Fees" },
   { id: "admin-events" as Tab, label: "Events" },
   { id: "admin-announcements" as Tab, label: "Announcements" },
+  { id: "registration-requests" as Tab, label: "Reg. Requests" },
+  { id: "parent-link-requests" as Tab, label: "Parent Links" },
   { id: "users" as Tab, label: "Admin Access" },
 ];
 
@@ -601,6 +608,17 @@ function UserContent({
   const [events, setEvents] = useState<SchoolEvent[]>([]);
   const [announcements, setAnnouncements] = useState<Announcement[]>([]);
   const [loaded, setLoaded] = useState(false);
+  // Student enrollment form state
+  const [enrollName, setEnrollName] = useState("");
+  const [enrollAdmission, setEnrollAdmission] = useState("");
+  const [enrollClass, setEnrollClass] = useState("");
+  const [enrollSubmitting, setEnrollSubmitting] = useState(false);
+  const [enrollDone, setEnrollDone] = useState(false);
+  // Parent link request form state
+  const [linkAdmission, setLinkAdmission] = useState("");
+  const [linkStudentName, setLinkStudentName] = useState("");
+  const [linkSubmitting, setLinkSubmitting] = useState(false);
+  const [linkDone, setLinkDone] = useState(false);
 
   useEffect(() => {
     if (!actor) return;
@@ -629,6 +647,27 @@ function UserContent({
             ]);
             setGrades(allGrades);
             setFeePayments(allPayments);
+          }
+        } else if (profile.schoolRole === "student") {
+          const [myRecord, ev, ann, sub] = await Promise.all([
+            actor!.getMyStudentRecord(),
+            actor!.getAllEvents(),
+            actor!.getAllAnnouncements(),
+            actor!.getAllSubjects(),
+          ]);
+          setEvents(ev);
+          setAnnouncements(ann);
+          setSubjects(sub);
+          if (myRecord) {
+            setStudents([myRecord]);
+            const [stGrades, stFees, stFs] = await Promise.all([
+              actor!.getGradesByStudent(myRecord.id),
+              actor!.getFeePaymentsByStudent(myRecord.id),
+              actor!.getAllFeeStructures(),
+            ]);
+            setGrades(stGrades);
+            setFeePayments(stFees);
+            setFeeStructures(stFs);
           }
         } else {
           const [s, sub, fs, fp, ev, ann] = await Promise.all([
@@ -861,45 +900,184 @@ function UserContent({
             );
           })}
           {myStudents.length === 0 && profile.schoolRole === "parent" && (
-            <Card className="border-amber-200 bg-amber-50 dark:bg-amber-950/20">
-              <CardContent className="pt-6 space-y-3">
-                <p className="font-medium text-amber-800 dark:text-amber-200">
-                  No students linked to your account yet.
-                </p>
-                <p className="text-sm text-amber-700 dark:text-amber-300">
-                  Ask the admin to add your student and provide them with your
-                  Principal ID below.
-                </p>
-                <div className="flex items-center gap-2 p-2 bg-white dark:bg-gray-900 rounded border text-xs font-mono break-all">
-                  <span className="font-semibold shrink-0">
-                    Your Principal ID:
-                  </span>
-                  <span className="text-muted-foreground">
-                    {userIdentity?.getPrincipal().toString() ?? "—"}
-                  </span>
-                  <button
-                    type="button"
-                    className="ml-auto shrink-0 text-xs text-primary hover:underline"
-                    onClick={() => {
-                      const pid = userIdentity?.getPrincipal().toString();
-                      if (pid) {
-                        navigator.clipboard.writeText(pid);
+            <Card className="border-[#1a4d2e]/30 bg-[#1a4d2e]/5">
+              <CardHeader>
+                <CardTitle className="font-display text-lg text-[#1a4d2e] dark:text-green-300">
+                  Link Your Child to This Account
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                {linkDone ? (
+                  <div
+                    className="p-4 bg-green-50 dark:bg-green-950/30 border border-green-200 rounded-lg text-green-800 dark:text-green-200 text-sm"
+                    data-ocid="parent.link_request.success_state"
+                  >
+                    ✅ Your request has been submitted. Admin will link your
+                    account once verified.
+                  </div>
+                ) : (
+                  <form
+                    data-ocid="parent.link_request.panel"
+                    onSubmit={async (e) => {
+                      e.preventDefault();
+                      if (!linkAdmission || !linkStudentName) return;
+                      setLinkSubmitting(true);
+                      try {
+                        await actor!.submitParentLinkRequest(
+                          linkAdmission,
+                          linkStudentName,
+                          new Date().toISOString().split("T")[0],
+                        );
+                        setLinkDone(true);
+                        toast.success("Link request submitted!");
+                      } catch {
+                        toast.error("Failed to submit request.");
+                      } finally {
+                        setLinkSubmitting(false);
                       }
                     }}
+                    className="space-y-4"
                   >
-                    Copy
-                  </button>
-                </div>
+                    <p className="text-sm text-muted-foreground">
+                      Enter your child&apos;s details below. The admin will
+                      verify and link your account.
+                    </p>
+                    <div className="space-y-2">
+                      <Label htmlFor="link-admission">
+                        Child&apos;s Admission Number
+                      </Label>
+                      <Input
+                        id="link-admission"
+                        data-ocid="parent.link_request.input"
+                        value={linkAdmission}
+                        onChange={(e) => setLinkAdmission(e.target.value)}
+                        placeholder="e.g. MGH/2024/001"
+                        required
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="link-name">Child&apos;s Full Name</Label>
+                      <Input
+                        id="link-name"
+                        value={linkStudentName}
+                        onChange={(e) => setLinkStudentName(e.target.value)}
+                        placeholder="Full name as enrolled"
+                        required
+                      />
+                    </div>
+                    <Button
+                      type="submit"
+                      data-ocid="parent.link_request.submit_button"
+                      disabled={linkSubmitting}
+                      className="w-full bg-[#1a4d2e] hover:bg-[#1a4d2e]/90 text-white"
+                    >
+                      {linkSubmitting ? "Submitting..." : "Submit Link Request"}
+                    </Button>
+                  </form>
+                )}
               </CardContent>
             </Card>
           )}
-          {myStudents.length === 0 && profile.schoolRole !== "parent" && (
-            <Card>
-              <CardContent className="pt-6">
-                <p className="text-muted-foreground">No students found.</p>
+          {myStudents.length === 0 && profile.schoolRole === "student" && (
+            <Card className="border-[#1a4d2e]/30 bg-[#1a4d2e]/5">
+              <CardHeader>
+                <CardTitle className="font-display text-lg text-[#1a4d2e] dark:text-green-300">
+                  Request Enrollment
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                {enrollDone ? (
+                  <div
+                    className="p-4 bg-green-50 dark:bg-green-950/30 border border-green-200 rounded-lg text-green-800 dark:text-green-200 text-sm"
+                    data-ocid="student.enrollment.success_state"
+                  >
+                    ✅ Your enrollment request has been submitted. Please wait
+                    for admin approval.
+                  </div>
+                ) : (
+                  <form
+                    data-ocid="student.enrollment.panel"
+                    onSubmit={async (e) => {
+                      e.preventDefault();
+                      if (!enrollName || !enrollAdmission || !enrollClass)
+                        return;
+                      setEnrollSubmitting(true);
+                      try {
+                        await actor!.submitStudentRegistration(
+                          enrollName,
+                          enrollAdmission,
+                          enrollClass,
+                          new Date().toISOString().split("T")[0],
+                        );
+                        setEnrollDone(true);
+                        toast.success("Enrollment request submitted!");
+                      } catch {
+                        toast.error("Failed to submit enrollment.");
+                      } finally {
+                        setEnrollSubmitting(false);
+                      }
+                    }}
+                    className="space-y-4"
+                  >
+                    <p className="text-sm text-muted-foreground">
+                      Submit your enrollment details. The admin will verify and
+                      activate your account.
+                    </p>
+                    <div className="space-y-2">
+                      <Label htmlFor="enroll-name">Full Name</Label>
+                      <Input
+                        id="enroll-name"
+                        data-ocid="student.enrollment.input"
+                        value={enrollName}
+                        onChange={(e) => setEnrollName(e.target.value)}
+                        placeholder="Your full name"
+                        required
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="enroll-admission">Admission Number</Label>
+                      <Input
+                        id="enroll-admission"
+                        value={enrollAdmission}
+                        onChange={(e) => setEnrollAdmission(e.target.value)}
+                        placeholder="e.g. MGH/2024/001"
+                        required
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="enroll-class">Class / Form</Label>
+                      <Input
+                        id="enroll-class"
+                        value={enrollClass}
+                        onChange={(e) => setEnrollClass(e.target.value)}
+                        placeholder="e.g. Form 2 North"
+                        required
+                      />
+                    </div>
+                    <Button
+                      type="submit"
+                      data-ocid="student.enrollment.submit_button"
+                      disabled={enrollSubmitting}
+                      className="w-full bg-[#1a4d2e] hover:bg-[#1a4d2e]/90 text-white"
+                    >
+                      {enrollSubmitting
+                        ? "Submitting..."
+                        : "Request Enrollment"}
+                    </Button>
+                  </form>
+                )}
               </CardContent>
             </Card>
           )}
+          {myStudents.length === 0 &&
+            profile.schoolRole !== "parent" &&
+            profile.schoolRole !== "student" && (
+              <Card>
+                <CardContent className="pt-6">
+                  <p className="text-muted-foreground">No students found.</p>
+                </CardContent>
+              </Card>
+            )}
         </div>
       );
 
@@ -1184,6 +1362,12 @@ function AdminContent({
 
     case "users":
       return <AdminAccessPanel actor={actor!} />;
+
+    case "registration-requests":
+      return <RegistrationRequestsPanel actor={actor!} />;
+
+    case "parent-link-requests":
+      return <ParentLinkRequestsPanel actor={actor!} />;
 
     default:
       return null;
@@ -2666,6 +2850,318 @@ function EventCard({ event }: { event: SchoolEvent }) {
         <p className="text-sm text-muted-foreground">{event.description}</p>
       </CardContent>
     </Card>
+  );
+}
+
+function RegistrationRequestsPanel({
+  actor,
+}: { actor: import("./backend.d").backendInterface }) {
+  const [requests, setRequests] = useState<RegistrationRequest[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [approvingId, setApprovingId] = useState<bigint | null>(null);
+  const [rejectingId, setRejectingId] = useState<bigint | null>(null);
+  const [parentIdInput, setParentIdInput] = useState<Record<string, string>>(
+    {},
+  );
+
+  const loadRequests = useCallback(async () => {
+    setLoading(true);
+    try {
+      const data = await actor.getAllRegistrationRequests();
+      setRequests(data);
+    } catch {
+      toast.error("Failed to load registration requests");
+    } finally {
+      setLoading(false);
+    }
+  }, [actor]);
+
+  useEffect(() => {
+    loadRequests();
+  }, [loadRequests]);
+
+  async function handleApprove(req: RegistrationRequest) {
+    const pidStr = parentIdInput[req.id.toString()] ?? "";
+    if (!pidStr.trim()) {
+      toast.error("Please enter a Parent Principal ID");
+      return;
+    }
+    let pid: Principal;
+    try {
+      pid = Principal.fromText(pidStr.trim());
+    } catch {
+      toast.error("Invalid Principal ID format");
+      return;
+    }
+    setApprovingId(req.id);
+    try {
+      await actor.approveStudentRegistration(req.id, pid);
+      toast.success("Registration approved!");
+      loadRequests();
+    } catch {
+      toast.error("Failed to approve registration");
+    } finally {
+      setApprovingId(null);
+    }
+  }
+
+  async function handleReject(req: RegistrationRequest) {
+    setRejectingId(req.id);
+    try {
+      await actor.rejectStudentRegistration(req.id);
+      toast.success("Registration rejected");
+      loadRequests();
+    } catch {
+      toast.error("Failed to reject registration");
+    } finally {
+      setRejectingId(null);
+    }
+  }
+
+  if (loading)
+    return (
+      <div
+        className="text-muted-foreground"
+        data-ocid="registration.loading_state"
+      >
+        Loading registration requests...
+      </div>
+    );
+
+  return (
+    <div className="space-y-6" data-ocid="registration.panel">
+      <h2 className="font-display text-2xl font-bold">
+        Student Registration Requests
+      </h2>
+      {requests.length === 0 ? (
+        <Card>
+          <CardContent className="pt-6">
+            <p
+              className="text-muted-foreground"
+              data-ocid="registration.empty_state"
+            >
+              No registration requests found.
+            </p>
+          </CardContent>
+        </Card>
+      ) : (
+        <div className="space-y-4">
+          {requests.map((req, idx) => (
+            <Card
+              key={req.id.toString()}
+              data-ocid={`registration.item.${idx + 1}`}
+            >
+              <CardContent className="pt-4 space-y-3">
+                <div className="flex flex-wrap items-start justify-between gap-2">
+                  <div>
+                    <div className="font-semibold">{req.name}</div>
+                    <div className="text-sm text-muted-foreground">
+                      Admission: {req.admissionNumber} &bull; Class:{" "}
+                      {req.studentClass}
+                    </div>
+                    <div className="text-xs text-muted-foreground mt-1">
+                      Submitted: {formatDate(req.requestDate)}
+                    </div>
+                    <div className="text-xs font-mono text-muted-foreground mt-1 break-all">
+                      Principal: {req.callerPrincipal.toString().slice(0, 20)}
+                      ...
+                    </div>
+                  </div>
+                  <Badge
+                    className={
+                      req.status === "approved"
+                        ? "bg-green-100 text-green-800 border-green-300"
+                        : req.status === "rejected"
+                          ? "bg-red-100 text-red-800 border-red-300"
+                          : "bg-yellow-100 text-yellow-800 border-yellow-300"
+                    }
+                  >
+                    {req.status}
+                  </Badge>
+                </div>
+                {req.status === "pending" && (
+                  <div className="space-y-2 border-t pt-3">
+                    <Label className="text-xs text-muted-foreground">
+                      Parent Principal ID (to link parent account):
+                    </Label>
+                    <Input
+                      data-ocid={`registration.input.${idx + 1}`}
+                      placeholder="Paste parent's Principal ID"
+                      value={parentIdInput[req.id.toString()] ?? ""}
+                      onChange={(e) =>
+                        setParentIdInput((prev) => ({
+                          ...prev,
+                          [req.id.toString()]: e.target.value,
+                        }))
+                      }
+                      className="text-xs font-mono"
+                    />
+                    <div className="flex gap-2">
+                      <Button
+                        size="sm"
+                        data-ocid={`registration.confirm_button.${idx + 1}`}
+                        disabled={approvingId === req.id}
+                        className="bg-[#1a4d2e] hover:bg-[#1a4d2e]/90 text-white"
+                        onClick={() => handleApprove(req)}
+                      >
+                        {approvingId === req.id ? "Approving..." : "Approve"}
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="destructive"
+                        data-ocid={`registration.delete_button.${idx + 1}`}
+                        disabled={rejectingId === req.id}
+                        onClick={() => handleReject(req)}
+                      >
+                        {rejectingId === req.id ? "Rejecting..." : "Reject"}
+                      </Button>
+                    </div>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function ParentLinkRequestsPanel({
+  actor,
+}: { actor: import("./backend.d").backendInterface }) {
+  const [requests, setRequests] = useState<ParentLinkRequest[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [approvingId, setApprovingId] = useState<bigint | null>(null);
+  const [rejectingId, setRejectingId] = useState<bigint | null>(null);
+
+  const loadRequests = useCallback(async () => {
+    setLoading(true);
+    try {
+      const data = await actor.getAllParentLinkRequests();
+      setRequests(data);
+    } catch {
+      toast.error("Failed to load parent link requests");
+    } finally {
+      setLoading(false);
+    }
+  }, [actor]);
+
+  useEffect(() => {
+    loadRequests();
+  }, [loadRequests]);
+
+  async function handleApprove(req: ParentLinkRequest) {
+    setApprovingId(req.id);
+    try {
+      await actor.approveParentLinkRequest(req.id);
+      toast.success("Parent link approved!");
+      loadRequests();
+    } catch {
+      toast.error("Failed to approve link");
+    } finally {
+      setApprovingId(null);
+    }
+  }
+
+  async function handleReject(req: ParentLinkRequest) {
+    setRejectingId(req.id);
+    try {
+      await actor.rejectParentLinkRequest(req.id);
+      toast.success("Link request rejected");
+      loadRequests();
+    } catch {
+      toast.error("Failed to reject request");
+    } finally {
+      setRejectingId(null);
+    }
+  }
+
+  if (loading)
+    return (
+      <div
+        className="text-muted-foreground"
+        data-ocid="parent_link.loading_state"
+      >
+        Loading parent link requests...
+      </div>
+    );
+
+  return (
+    <div className="space-y-6" data-ocid="parent_link.panel">
+      <h2 className="font-display text-2xl font-bold">Parent Link Requests</h2>
+      {requests.length === 0 ? (
+        <Card>
+          <CardContent className="pt-6">
+            <p
+              className="text-muted-foreground"
+              data-ocid="parent_link.empty_state"
+            >
+              No parent link requests found.
+            </p>
+          </CardContent>
+        </Card>
+      ) : (
+        <div className="space-y-4">
+          {requests.map((req, idx) => (
+            <Card
+              key={req.id.toString()}
+              data-ocid={`parent_link.item.${idx + 1}`}
+            >
+              <CardContent className="pt-4 space-y-3">
+                <div className="flex flex-wrap items-start justify-between gap-2">
+                  <div>
+                    <div className="font-semibold">{req.studentName}</div>
+                    <div className="text-sm text-muted-foreground">
+                      Admission: {req.admissionNumber}
+                    </div>
+                    <div className="text-xs font-mono text-muted-foreground mt-1 break-all">
+                      Parent: {req.callerPrincipal.toString().slice(0, 30)}...
+                    </div>
+                    <div className="text-xs text-muted-foreground mt-1">
+                      Submitted: {formatDate(req.requestDate)}
+                    </div>
+                  </div>
+                  <Badge
+                    className={
+                      req.status === "approved"
+                        ? "bg-green-100 text-green-800 border-green-300"
+                        : req.status === "rejected"
+                          ? "bg-red-100 text-red-800 border-red-300"
+                          : "bg-yellow-100 text-yellow-800 border-yellow-300"
+                    }
+                  >
+                    {req.status}
+                  </Badge>
+                </div>
+                {req.status === "pending" && (
+                  <div className="flex gap-2 border-t pt-3">
+                    <Button
+                      size="sm"
+                      data-ocid={`parent_link.confirm_button.${idx + 1}`}
+                      disabled={approvingId === req.id}
+                      className="bg-[#1a4d2e] hover:bg-[#1a4d2e]/90 text-white"
+                      onClick={() => handleApprove(req)}
+                    >
+                      {approvingId === req.id ? "Approving..." : "Approve"}
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="destructive"
+                      data-ocid={`parent_link.delete_button.${idx + 1}`}
+                      disabled={rejectingId === req.id}
+                      onClick={() => handleReject(req)}
+                    >
+                      {rejectingId === req.id ? "Rejecting..." : "Reject"}
+                    </Button>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+      )}
+    </div>
   );
 }
 

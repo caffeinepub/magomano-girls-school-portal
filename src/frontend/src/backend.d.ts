@@ -66,6 +66,23 @@ export interface FeeStructure {
     year: bigint;
     amount: bigint;
 }
+export interface RegistrationRequest {
+    id: bigint;
+    callerPrincipal: Principal;
+    name: string;
+    admissionNumber: string;
+    studentClass: string;
+    requestDate: string;
+    status: string;
+}
+export interface ParentLinkRequest {
+    id: bigint;
+    callerPrincipal: Principal;
+    admissionNumber: string;
+    studentName: string;
+    requestDate: string;
+    status: string;
+}
 export enum SchoolRole {
     admin = "admin",
     teacher = "teacher",
@@ -127,4 +144,13 @@ export interface backendInterface {
     getFeePaymentsByStudent(studentId: bigint): Promise<Array<FeePayment>>;
     getAdminCount(): Promise<bigint>;
     grantAdminRole(target: Principal): Promise<void>;
+    getMyStudentRecord(): Promise<Student | null>;
+    submitStudentRegistration(name: string, admissionNumber: string, studentClass: string, requestDate: string): Promise<bigint>;
+    getAllRegistrationRequests(): Promise<Array<RegistrationRequest>>;
+    approveStudentRegistration(requestId: bigint, parentId: Principal): Promise<bigint>;
+    rejectStudentRegistration(requestId: bigint): Promise<void>;
+    submitParentLinkRequest(admissionNumber: string, studentName: string, requestDate: string): Promise<bigint>;
+    getAllParentLinkRequests(): Promise<Array<ParentLinkRequest>>;
+    approveParentLinkRequest(requestId: bigint): Promise<void>;
+    rejectParentLinkRequest(requestId: bigint): Promise<void>;
 }

@@ -18,7 +18,6 @@ actor {
 
   public type UserRole = AccessControl.UserRole;
 
-  // Custom role mapping for school system
   public type SchoolRole = {
     #admin;
     #teacher;
@@ -33,6 +32,7 @@ actor {
     email : Text;
   };
 
+  // Student type kept identical to previous version (no new fields)
   public type Student = {
     id : Nat;
     name : Text;
@@ -93,6 +93,25 @@ actor {
     targetRole : Text;
   };
 
+  public type RegistrationRequest = {
+    id : Nat;
+    callerPrincipal : Principal;
+    name : Text;
+    admissionNumber : Text;
+    studentClass : Text;
+    requestDate : Text;
+    status : Text;
+  };
+
+  public type ParentLinkRequest = {
+    id : Nat;
+    callerPrincipal : Principal;
+    admissionNumber : Text;
+    studentName : Text;
+    requestDate : Text;
+    status : Text;
+  };
+
   let userProfiles = Map.empty<Principal, UserProfile>();
   let students = Map.empty<Nat, Student>();
   let cbcSubjects = Map.empty<Nat, CBCSubject>();
@@ -101,6 +120,10 @@ actor {
   let feePayments = Map.empty<Nat, FeePayment>();
   let schoolEvents = Map.empty<Nat, SchoolEvent>();
   let announcements = Map.empty<Nat, Announcement>();
+  let registrationRequests = Map.empty<Nat, RegistrationRequest>();
+  let parentLinkRequests = Map.empty<Nat, ParentLinkRequest>();
+  // Maps student ID -> student's own Principal (for self-login)
+  let studentPrincipals = Map.empty<Nat, Principal>();
 
   var nextStudentId = 1;
   var nextSubjectId = 1;
@@ -109,8 +132,9 @@ actor {
   var nextFeePaymentId = 1;
   var nextEventId = 1;
   var nextAnnouncementId = 1;
+  var nextRegistrationRequestId = 1;
+  var nextParentLinkRequestId = 1;
 
-  // Helper function to check if user is admin or teacher
   func isAdminOrTeacher(caller : Principal) : Bool {
     if (AccessControl.isAdmin(accessControlState, caller)) {
       return true;
@@ -126,32 +150,18 @@ actor {
     };
   };
 
-  // Helper function to check if user can access student data
   func canAccessStudentData(caller : Principal, studentId : Nat) : Bool {
     if (isAdminOrTeacher(caller)) {
       return true;
     };
-    
     switch (students.get(studentId)) {
       case (?student) {
-        // Parent can access their child's data
         if (student.parentId == caller) {
           return true;
         };
-        // Student can access their own data (if they have a profile)
-        switch (userProfiles.get(caller)) {
-          case (?profile) {
-            switch (profile.schoolRole) {
-              case (#student) {
-                // Check if this caller is the student
-                // We need to find if any student record has this caller as parent
-                // For students, we assume they access via their parent's account
-                // or we'd need a separate studentUserId field
-                false
-              };
-              case (_) { false };
-            };
-          };
+        // Check if caller is the student themselves
+        switch (studentPrincipals.get(studentId)) {
+          case (?pid) { pid == caller };
           case (null) { false };
         };
       };
@@ -218,6 +228,7 @@ actor {
       Runtime.trap("Unauthorized: Only admins and teachers can delete students");
     };
     students.remove(id);
+    studentPrincipals.remove(id);
   };
 
   public query ({ caller }) func getStudent(studentId : Nat) : async Student {
@@ -586,7 +597,6 @@ actor {
     if (not (AccessControl.hasPermission(accessControlState, caller, #user))) {
       Runtime.trap("Unauthorized: Authentication required");
     };
-    // Return all events (in a real implementation, filter by date)
     schoolEvents.values().toArray();
   };
 
@@ -646,7 +656,6 @@ actor {
     announcements.values().toArray();
   };
 
-
   // Get all students linked to the calling parent
   public query ({ caller }) func getStudentsByParent() : async [Student] {
     if (not (AccessControl.hasPermission(accessControlState, caller, #user))) {
@@ -655,7 +664,21 @@ actor {
     students.values().toArray().filter<Student>(func(s) { s.parentId == caller });
   };
 
-  // Get fee payments for a specific student (parent-accessible)
+  // Get student record for the logged-in student (matched via studentPrincipals map)
+  public query ({ caller }) func getMyStudentRecord() : async ?Student {
+    if (not (AccessControl.hasPermission(accessControlState, caller, #user))) {
+      Runtime.trap("Unauthorized: Authentication required");
+    };
+    var found : ?Student = null;
+    for ((studentId, pid) in studentPrincipals.entries()) {
+      if (pid == caller) {
+        found := students.get(studentId);
+      };
+    };
+    found
+  };
+
+  // Get fee payments for a specific student
   public query ({ caller }) func getFeePaymentsByStudent(studentId : Nat) : async [FeePayment] {
     if (not (AccessControl.hasPermission(accessControlState, caller, #user))) {
       Runtime.trap("Unauthorized: Authentication required");
@@ -664,6 +687,177 @@ actor {
       Runtime.trap("Unauthorized: Cannot access this student's payment data");
     };
     feePayments.values().toArray().filter<FeePayment>(func(p) { p.studentId == studentId });
+  };
+
+  // ---- Student Self-Registration Requests ----
+
+  public shared ({ caller }) func submitStudentRegistration(name : Text, admissionNumber : Text, studentClass : Text, requestDate : Text) : async Nat {
+    if (not (AccessControl.hasPermission(accessControlState, caller, #user))) {
+      Runtime.trap("Unauthorized: Authentication required");
+    };
+    let id = nextRegistrationRequestId;
+    nextRegistrationRequestId += 1;
+    let req : RegistrationRequest = {
+      id = id;
+      callerPrincipal = caller;
+      name = name;
+      admissionNumber = admissionNumber;
+      studentClass = studentClass;
+      requestDate = requestDate;
+      status = "pending";
+    };
+    registrationRequests.add(id, req);
+    id
+  };
+
+  public query ({ caller }) func getAllRegistrationRequests() : async [RegistrationRequest] {
+    if (not isAdminOrTeacher(caller)) {
+      Runtime.trap("Unauthorized: Only admins and teachers can view registration requests");
+    };
+    registrationRequests.values().toArray();
+  };
+
+  // Admin approves student registration: creates student record + links principal
+  public shared ({ caller }) func approveStudentRegistration(requestId : Nat, parentId : Principal) : async Nat {
+    if (not isAdminOrTeacher(caller)) {
+      Runtime.trap("Unauthorized: Only admins can approve registrations");
+    };
+    switch (registrationRequests.get(requestId)) {
+      case (null) { Runtime.trap("Registration request not found") };
+      case (?req) {
+        let studentId = nextStudentId;
+        nextStudentId += 1;
+        let student : Student = {
+          id = studentId;
+          name = req.name;
+          admissionNumber = req.admissionNumber;
+          studentClass = req.studentClass;
+          parentId = parentId;
+        };
+        students.add(studentId, student);
+        // Link the student's own principal
+        studentPrincipals.add(studentId, req.callerPrincipal);
+        let updatedReq : RegistrationRequest = {
+          id = req.id;
+          callerPrincipal = req.callerPrincipal;
+          name = req.name;
+          admissionNumber = req.admissionNumber;
+          studentClass = req.studentClass;
+          requestDate = req.requestDate;
+          status = "approved";
+        };
+        registrationRequests.add(requestId, updatedReq);
+        studentId
+      };
+    };
+  };
+
+  public shared ({ caller }) func rejectStudentRegistration(requestId : Nat) : async () {
+    if (not isAdminOrTeacher(caller)) {
+      Runtime.trap("Unauthorized: Only admins can reject registrations");
+    };
+    switch (registrationRequests.get(requestId)) {
+      case (null) { Runtime.trap("Registration request not found") };
+      case (?req) {
+        let updatedReq : RegistrationRequest = {
+          id = req.id;
+          callerPrincipal = req.callerPrincipal;
+          name = req.name;
+          admissionNumber = req.admissionNumber;
+          studentClass = req.studentClass;
+          requestDate = req.requestDate;
+          status = "rejected";
+        };
+        registrationRequests.add(requestId, updatedReq);
+      };
+    };
+  };
+
+  // ---- Parent Link Requests ----
+
+  public shared ({ caller }) func submitParentLinkRequest(admissionNumber : Text, studentName : Text, requestDate : Text) : async Nat {
+    if (not (AccessControl.hasPermission(accessControlState, caller, #user))) {
+      Runtime.trap("Unauthorized: Authentication required");
+    };
+    let id = nextParentLinkRequestId;
+    nextParentLinkRequestId += 1;
+    let req : ParentLinkRequest = {
+      id = id;
+      callerPrincipal = caller;
+      admissionNumber = admissionNumber;
+      studentName = studentName;
+      requestDate = requestDate;
+      status = "pending";
+    };
+    parentLinkRequests.add(id, req);
+    id
+  };
+
+  public query ({ caller }) func getAllParentLinkRequests() : async [ParentLinkRequest] {
+    if (not isAdminOrTeacher(caller)) {
+      Runtime.trap("Unauthorized: Only admins and teachers can view parent link requests");
+    };
+    parentLinkRequests.values().toArray();
+  };
+
+  // Admin approves parent link: updates student's parentId
+  public shared ({ caller }) func approveParentLinkRequest(requestId : Nat) : async () {
+    if (not isAdminOrTeacher(caller)) {
+      Runtime.trap("Unauthorized: Only admins can approve parent link requests");
+    };
+    switch (parentLinkRequests.get(requestId)) {
+      case (null) { Runtime.trap("Parent link request not found") };
+      case (?req) {
+        var foundStudent : ?Student = null;
+        for (student in students.values()) {
+          if (student.admissionNumber == req.admissionNumber) {
+            foundStudent := ?student;
+          };
+        };
+        switch (foundStudent) {
+          case (null) { Runtime.trap("Student with that admission number not found") };
+          case (?student) {
+            let updatedStudent : Student = {
+              id = student.id;
+              name = student.name;
+              admissionNumber = student.admissionNumber;
+              studentClass = student.studentClass;
+              parentId = req.callerPrincipal;
+            };
+            students.add(student.id, updatedStudent);
+            let updatedReq : ParentLinkRequest = {
+              id = req.id;
+              callerPrincipal = req.callerPrincipal;
+              admissionNumber = req.admissionNumber;
+              studentName = req.studentName;
+              requestDate = req.requestDate;
+              status = "approved";
+            };
+            parentLinkRequests.add(requestId, updatedReq);
+          };
+        };
+      };
+    };
+  };
+
+  public shared ({ caller }) func rejectParentLinkRequest(requestId : Nat) : async () {
+    if (not isAdminOrTeacher(caller)) {
+      Runtime.trap("Unauthorized: Only admins can reject parent link requests");
+    };
+    switch (parentLinkRequests.get(requestId)) {
+      case (null) { Runtime.trap("Parent link request not found") };
+      case (?req) {
+        let updatedReq : ParentLinkRequest = {
+          id = req.id;
+          callerPrincipal = req.callerPrincipal;
+          admissionNumber = req.admissionNumber;
+          studentName = req.studentName;
+          requestDate = req.requestDate;
+          status = "rejected";
+        };
+        parentLinkRequests.add(requestId, updatedReq);
+      };
+    };
   };
 
   // Count how many admins currently exist
@@ -678,12 +872,10 @@ actor {
     count
   };
 
-  // Get count of current admins
   public query func getAdminCount() : async Nat {
     countAdmins()
   };
 
-  // Grant admin role with max 3 limit
   public shared ({ caller }) func grantAdminRole(target : Principal) : async () {
     if (not AccessControl.isAdmin(accessControlState, caller)) {
       Runtime.trap("Unauthorized: Only admins can grant admin roles");
@@ -694,49 +886,41 @@ actor {
     AccessControl.assignRole(accessControlState, caller, target, #admin);
   };
 
-  // Seed sample data
   public shared ({ caller }) func seedSampleData() : async () {
     if (not (AccessControl.isAdmin(accessControlState, caller))) {
       Runtime.trap("Unauthorized: Only admins can seed data");
     };
     
-    // Create sample students
     let parent1 = Principal.fromText("aaaaa-aa");
     students.add(1, { id = 1; name = "Jane Doe"; admissionNumber = "MGH001"; studentClass = "Form 1"; parentId = parent1 });
     students.add(2, { id = 2; name = "Mary Smith"; admissionNumber = "MGH002"; studentClass = "Form 2"; parentId = parent1 });
     students.add(3, { id = 3; name = "Grace Johnson"; admissionNumber = "MGH003"; studentClass = "Form 3"; parentId = parent1 });
     nextStudentId := 4;
     
-    // Create sample subjects
     cbcSubjects.add(1, { id = 1; name = "Mathematics"; teacher = "Mr. Kamau" });
     cbcSubjects.add(2, { id = 2; name = "English"; teacher = "Mrs. Wanjiru" });
     cbcSubjects.add(3, { id = 3; name = "Kiswahili"; teacher = "Mr. Omondi" });
     nextSubjectId := 4;
     
-    // Create sample grades
     cbcGrades.add(1, { id = 1; studentId = 1; subjectId = 1; term = 1; year = 2024; level = "Meeting"; score = 75; remarks = "Good progress"; teacherId = 1 });
     cbcGrades.add(2, { id = 2; studentId = 1; subjectId = 2; term = 1; year = 2024; level = "Exceeding"; score = 85; remarks = "Excellent work"; teacherId = 2 });
     cbcGrades.add(3, { id = 3; studentId = 2; subjectId = 1; term = 1; year = 2024; level = "Approaching"; score = 65; remarks = "Needs improvement"; teacherId = 1 });
     nextGradeId := 4;
     
-    // Create sample fee structures
     feeStructures.add(1, { id = 1; item = "Tuition"; amount = 15000; term = 1; year = 2024 });
     feeStructures.add(2, { id = 2; item = "Books"; amount = 3000; term = 1; year = 2024 });
     feeStructures.add(3, { id = 3; item = "Uniform"; amount = 5000; term = 1; year = 2024 });
     nextFeeStructureId := 4;
     
-    // Create sample fee payments
     feePayments.add(1, { id = 1; studentId = 1; amount = 15000; date = "2024-01-15"; receiptNumber = "RCP001"; term = 1; year = 2024 });
     feePayments.add(2, { id = 2; studentId = 2; amount = 10000; date = "2024-01-20"; receiptNumber = "RCP002"; term = 1; year = 2024 });
     nextFeePaymentId := 3;
     
-    // Create sample events
     schoolEvents.add(1, { id = 1; title = "Sports Day"; description = "Annual sports competition"; date = "2024-03-15"; category = "sports" });
     schoolEvents.add(2, { id = 2; title = "Science Fair"; description = "Student science projects exhibition"; date = "2024-04-20"; category = "academic" });
     schoolEvents.add(3, { id = 3; title = "Cultural Day"; description = "Celebration of diverse cultures"; date = "2024-05-10"; category = "cultural" });
     nextEventId := 4;
     
-    // Create sample announcements
     announcements.add(1, { id = 1; title = "Term Opening"; content = "School reopens on January 8th"; date = "2024-01-01"; targetRole = "all" });
     announcements.add(2, { id = 2; title = "Parent Meeting"; content = "Parent-teacher meeting on February 15th"; date = "2024-02-01"; targetRole = "parents" });
     announcements.add(3, { id = 3; title = "Exam Schedule"; content = "End of term exams start March 1st"; date = "2024-02-20"; targetRole = "students" });
