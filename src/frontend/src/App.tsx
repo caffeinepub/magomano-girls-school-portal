@@ -335,7 +335,7 @@ export default function App() {
             </div>
           </header>
 
-          <div className="flex flex-1">
+          <div className="flex flex-col md:flex-row flex-1">
             {/* Sidebar */}
             <aside
               className="w-56 flex-shrink-0 hidden md:flex flex-col"
@@ -366,7 +366,7 @@ export default function App() {
             </div>
 
             {/* Main content */}
-            <main className="flex-1 p-4 md:p-6 overflow-auto">
+            <main className="flex-1 p-4 md:p-6 overflow-auto bg-background">
               {isAdmin ? (
                 <AdminContent tab={tab} actor={actor! as any} />
               ) : (
@@ -691,9 +691,10 @@ function UserContent({
             setGrades(allGrades);
           }
         }
-        setLoaded(true);
       } catch (e) {
         console.error(e);
+      } finally {
+        setLoaded(true);
       }
     }
     loadAll();
