@@ -573,7 +573,7 @@ function MobileNav({
           onClick={() => setTab(item.id)}
           className={`flex-shrink-0 px-3 py-2 text-xs font-medium whitespace-nowrap border-b-2 transition-colors ${
             tab === item.id
-              ? "border-green-400 text-white"
+              ? "border-primary text-primary-foreground"
               : "border-transparent"
           }`}
           style={
@@ -901,16 +901,16 @@ function UserContent({
             );
           })}
           {myStudents.length === 0 && profile.schoolRole === "parent" && (
-            <Card className="border-[#1a4d2e]/30 bg-[#1a4d2e]/5">
+            <Card className="border-border bg-muted/50">
               <CardHeader>
-                <CardTitle className="font-display text-lg text-[#1a4d2e] dark:text-green-300">
+                <CardTitle className="font-display text-lg text-foreground">
                   Link Your Child to This Account
                 </CardTitle>
               </CardHeader>
               <CardContent className="space-y-4">
                 {linkDone ? (
                   <div
-                    className="p-4 bg-green-50 dark:bg-green-950/30 border border-green-200 rounded-lg text-green-800 dark:text-green-200 text-sm"
+                    className="p-4 bg-muted border border-border rounded-lg text-foreground text-sm"
                     data-ocid="parent.link_request.success_state"
                   >
                     ✅ Your request has been submitted. Admin will link your
@@ -970,7 +970,7 @@ function UserContent({
                       type="submit"
                       data-ocid="parent.link_request.submit_button"
                       disabled={linkSubmitting}
-                      className="w-full bg-[#1a4d2e] hover:bg-[#1a4d2e]/90 text-white"
+                      className="w-full bg-primary hover:bg-primary/90 text-primary-foreground"
                     >
                       {linkSubmitting ? "Submitting..." : "Submit Link Request"}
                     </Button>
@@ -980,16 +980,16 @@ function UserContent({
             </Card>
           )}
           {myStudents.length === 0 && profile.schoolRole === "student" && (
-            <Card className="border-[#1a4d2e]/30 bg-[#1a4d2e]/5">
+            <Card className="border-border bg-muted/50">
               <CardHeader>
-                <CardTitle className="font-display text-lg text-[#1a4d2e] dark:text-green-300">
+                <CardTitle className="font-display text-lg text-foreground">
                   Request Enrollment
                 </CardTitle>
               </CardHeader>
               <CardContent className="space-y-4">
                 {enrollDone ? (
                   <div
-                    className="p-4 bg-green-50 dark:bg-green-950/30 border border-green-200 rounded-lg text-green-800 dark:text-green-200 text-sm"
+                    className="p-4 bg-muted border border-border rounded-lg text-foreground text-sm"
                     data-ocid="student.enrollment.success_state"
                   >
                     ✅ Your enrollment request has been submitted. Please wait
@@ -1059,7 +1059,7 @@ function UserContent({
                       type="submit"
                       data-ocid="student.enrollment.submit_button"
                       disabled={enrollSubmitting}
-                      className="w-full bg-[#1a4d2e] hover:bg-[#1a4d2e]/90 text-white"
+                      className="w-full bg-primary hover:bg-primary/90 text-primary-foreground"
                     >
                       {enrollSubmitting
                         ? "Submitting..."
@@ -1164,7 +1164,7 @@ function UserContent({
                 {feePayments.length > 0 && (
                   <div className="mt-3 pt-3 border-t font-semibold flex justify-between">
                     <span>Total Paid</span>
-                    <span className="text-green-700">
+                    <span className="text-foreground font-semibold">
                       {formatKES(
                         feePayments.reduce((s, p) => s + p.amount, BigInt(0)),
                       )}
@@ -1476,7 +1476,7 @@ function AdminAccessPanel({
           </Button>
           {feedback && (
             <p
-              className={`text-sm font-medium ${feedback.ok ? "text-green-600" : "text-destructive"}`}
+              className={`text-sm font-medium ${feedback.ok ? "text-foreground" : "text-destructive"}`}
               data-ocid={
                 feedback.ok
                   ? "admin.grant.success_state"
@@ -1710,7 +1710,7 @@ function StudentsPanel({
             <Button
               onClick={handleLinkPrincipal}
               disabled={linkPrincipalSaving}
-              className="bg-[#1a4d2e] text-white hover:bg-[#1a4d2e]/90"
+              className="bg-primary text-primary-foreground hover:bg-primary/90"
             >
               {linkPrincipalSaving ? "Linking..." : "Link Account"}
             </Button>
@@ -3087,7 +3087,7 @@ function RegistrationRequestsPanel({
                         size="sm"
                         data-ocid={`registration.confirm_button.${idx + 1}`}
                         disabled={approvingId === req.id}
-                        className="bg-[#1a4d2e] hover:bg-[#1a4d2e]/90 text-white"
+                        className="bg-primary hover:bg-primary/90 text-primary-foreground"
                         onClick={() => handleApprove(req)}
                       >
                         {approvingId === req.id ? "Approving..." : "Approve"}
@@ -3226,7 +3226,7 @@ function ParentLinkRequestsPanel({
                       size="sm"
                       data-ocid={`parent_link.confirm_button.${idx + 1}`}
                       disabled={approvingId === req.id}
-                      className="bg-[#1a4d2e] hover:bg-[#1a4d2e]/90 text-white"
+                      className="bg-primary hover:bg-primary/90 text-primary-foreground"
                       onClick={() => handleApprove(req)}
                     >
                       {approvingId === req.id ? "Approving..." : "Approve"}
