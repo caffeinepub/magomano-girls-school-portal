@@ -179,7 +179,7 @@ export default function App() {
     return (
       <div
         className="min-h-screen flex items-center justify-center"
-        style={{ background: "oklch(0.22 0.08 145)" }}
+        style={{ background: "#1a1a1a" }}
       >
         <div className="text-white text-lg">Loading...</div>
       </div>
@@ -194,7 +194,7 @@ export default function App() {
     return (
       <div
         className="min-h-screen flex items-center justify-center"
-        style={{ background: "oklch(0.22 0.08 145)" }}
+        style={{ background: "#1a1a1a" }}
       >
         <div className="text-white text-lg">Loading your profile...</div>
       </div>
@@ -294,7 +294,7 @@ export default function App() {
           {/* Top Nav */}
           <header
             className="flex items-center gap-3 px-4 py-2 shadow-md"
-            style={{ background: "oklch(0.22 0.08 145)" }}
+            style={{ background: "#1a1a1a" }}
           >
             <img
               src="/assets/generated/magomano-crest-transparent.dim_400x400.png"
@@ -305,10 +305,7 @@ export default function App() {
               <div className="font-display text-white text-base font-bold leading-tight truncate">
                 Magomano Girls High School
               </div>
-              <div
-                className="text-xs"
-                style={{ color: "oklch(0.75 0.08 120)" }}
-              >
+              <div className="text-xs" style={{ color: "#aaa" }}>
                 Parent & Student Portal
               </div>
             </div>
@@ -317,10 +314,7 @@ export default function App() {
                 <div className="text-white text-sm font-medium">
                   {userProfile.name}
                 </div>
-                <div
-                  className="text-xs capitalize"
-                  style={{ color: "oklch(0.75 0.08 120)" }}
-                >
+                <div className="text-xs capitalize" style={{ color: "#aaa" }}>
                   {userProfile.schoolRole}
                 </div>
               </div>
@@ -339,7 +333,7 @@ export default function App() {
             {/* Sidebar */}
             <aside
               className="w-56 flex-shrink-0 hidden md:flex flex-col"
-              style={{ background: "oklch(0.26 0.09 145)" }}
+              style={{ background: "#252525" }}
             >
               {isAdmin ? (
                 <AdminNav tab={tab} setTab={setTab} />
@@ -353,10 +347,7 @@ export default function App() {
             </aside>
 
             {/* Mobile nav */}
-            <div
-              className="md:hidden w-full"
-              style={{ background: "oklch(0.26 0.09 145)" }}
-            >
+            <div className="md:hidden w-full" style={{ background: "#252525" }}>
               <MobileNav
                 tab={tab}
                 setTab={setTab}
@@ -394,14 +385,14 @@ function LandingPage({
       className="min-h-screen flex flex-col items-center justify-center px-4"
       style={{
         background:
-          "linear-gradient(160deg, oklch(0.18 0.09 145) 0%, oklch(0.28 0.08 145) 60%, oklch(0.22 0.07 145) 100%)",
+          "linear-gradient(160deg, #f5f0e8 0%, #ede8de 60%, #f0ece2 100%)",
       }}
     >
       {/* Logo */}
       <div className="flex flex-col items-center mb-8">
         <div
           className="rounded-full p-4 mb-6"
-          style={{ background: "oklch(1 0 0 / 0.12)" }}
+          style={{ background: "rgba(0,0,0,0.08)" }}
         >
           <img
             src="/assets/generated/magomano-crest-transparent.dim_400x400.png"
@@ -410,15 +401,15 @@ function LandingPage({
           />
         </div>
 
-        <h1 className="font-display text-white text-2xl md:text-4xl font-bold text-center leading-tight mb-2">
+        <h1 className="font-display text-gray-900 text-2xl md:text-4xl font-bold text-center leading-tight mb-2">
           Magomano Girls
           <br />
           High School
         </h1>
-        <p className="text-lg mb-1" style={{ color: "oklch(0.82 0.1 120)" }}>
+        <p className="text-lg mb-1" style={{ color: "#333" }}>
           Parent & Student Portal
         </p>
-        <p className="text-sm italic" style={{ color: "oklch(0.7 0.05 120)" }}>
+        <p className="text-sm italic" style={{ color: "#666" }}>
           &ldquo;Our Success Depends on Me&rdquo;
         </p>
       </div>
@@ -435,9 +426,9 @@ function LandingPage({
             key={f}
             className="text-xs px-3 py-1 rounded-full border"
             style={{
-              color: "oklch(0.88 0.06 120)",
-              borderColor: "oklch(0.45 0.08 145)",
-              background: "oklch(0.28 0.07 145)",
+              color: "#333",
+              borderColor: "#ccc",
+              background: "rgba(0,0,0,0.06)",
             }}
           >
             {f}
@@ -455,10 +446,7 @@ function LandingPage({
         {isLoggingIn ? "Connecting..." : "Login with Internet Identity"}
       </Button>
 
-      <p
-        className="mt-4 text-xs text-center"
-        style={{ color: "oklch(0.55 0.04 145)" }}
-      >
+      <p className="mt-4 text-xs text-center" style={{ color: "#777" }}>
         Secure login powered by Internet Computer &bull; No passwords needed
       </p>
     </div>
@@ -502,8 +490,8 @@ function NavItem({
       }`}
       style={
         active
-          ? { background: "oklch(0.32 0.1 145)", color: "white" }
-          : { color: "oklch(0.78 0.05 120)" }
+          ? { background: "#1a1a1a", color: "white" }
+          : { color: "#b0a898" }
       }
     >
       {label}
@@ -516,7 +504,7 @@ function AdminNav({ tab, setTab }: { tab: Tab; setTab: (t: Tab) => void }) {
     <nav className="py-4">
       <div
         className="px-4 py-2 text-xs font-semibold uppercase tracking-wider"
-        style={{ color: "oklch(0.55 0.05 145)" }}
+        style={{ color: "#9e9488" }}
       >
         Admin Panel
       </div>
@@ -541,7 +529,7 @@ function UserNav({
     <nav className="py-4">
       <div
         className="px-4 py-2 text-xs font-semibold uppercase tracking-wider"
-        style={{ color: "oklch(0.55 0.05 145)" }}
+        style={{ color: "#9e9488" }}
       >
         {role === SchoolRole.parent ? "Parent Portal" : "Student Portal"}
       </div>
@@ -576,11 +564,7 @@ function MobileNav({
               ? "border-primary text-primary-foreground"
               : "border-transparent"
           }`}
-          style={
-            tab === item.id
-              ? { color: "white" }
-              : { color: "oklch(0.65 0.05 120)" }
-          }
+          style={tab === item.id ? { color: "white" } : { color: "#888" }}
         >
           {item.label}
         </button>
