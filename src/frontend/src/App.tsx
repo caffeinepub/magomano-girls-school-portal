@@ -28,7 +28,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Textarea } from "@/components/ui/textarea";
-import { Principal } from "@icp-sdk/core/principal";
+import type { Principal } from "@icp-sdk/core/principal";
 import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
 import type {
@@ -705,7 +705,8 @@ function UserContent({
           <h2 className="font-display text-2xl font-bold text-foreground">
             Welcome, {profile.name}
           </h2>
-          {profile.schoolRole === "parent" && (
+          {(profile.schoolRole === "parent" ||
+            profile.schoolRole === "student") && (
             <div className="flex items-center gap-2 p-3 bg-muted rounded-lg text-xs border">
               <span className="font-semibold shrink-0 text-muted-foreground">
                 Your Principal ID:
@@ -721,6 +722,7 @@ function UserContent({
                   const pid = userIdentity?.getPrincipal().toString();
                   if (pid) {
                     navigator.clipboard.writeText(pid);
+                    toast.success("Principal ID copied!");
                   }
                 }}
               >
@@ -978,11 +980,41 @@ function UserContent({
               <CardContent className="space-y-4">
                 {enrollDone ? (
                   <div
-                    className="p-4 bg-muted border border-border rounded-lg text-foreground text-sm"
+                    className="space-y-3"
                     data-ocid="student.enrollment.success_state"
                   >
-                    ✅ Your enrollment request has been submitted. Please wait
-                    for admin approval.
+                    <div className="p-4 bg-muted border border-border rounded-lg text-foreground text-sm">
+                      ✅ Your enrollment request has been submitted and is
+                      waiting for admin approval.
+                    </div>
+                    <div className="p-4 bg-primary/10 border-2 border-primary/40 rounded-lg space-y-2">
+                      <p className="text-sm font-semibold text-primary">
+                        📋 Next Step: Share your Principal ID with your admin
+                      </p>
+                      <p className="text-xs text-muted-foreground">
+                        For the admin to link your account, give them the
+                        Principal ID below. They will use it in the Students tab
+                        → "Link Login" button.
+                      </p>
+                      <div className="flex items-center gap-2 p-2 bg-muted rounded text-xs border">
+                        <span className="font-mono text-foreground break-all flex-1">
+                          {userIdentity?.getPrincipal().toString() ?? "—"}
+                        </span>
+                        <button
+                          type="button"
+                          className="shrink-0 text-xs text-primary hover:underline font-semibold"
+                          onClick={() => {
+                            const pid = userIdentity?.getPrincipal().toString();
+                            if (pid) {
+                              navigator.clipboard.writeText(pid);
+                              toast.success("Principal ID copied!");
+                            }
+                          }}
+                        >
+                          Copy
+                        </button>
+                      </div>
+                    </div>
                   </div>
                 ) : (
                   <form
@@ -1667,28 +1699,36 @@ function StudentsPanel({
             <DialogTitle>Link Student Login</DialogTitle>
           </DialogHeader>
           <div className="space-y-3">
-            <p className="text-sm text-muted-foreground">
-              Linking a Principal ID allows the student to log in and see their
-              data.
-            </p>
             {linkPrincipalStudent && (
               <div className="p-2 bg-muted rounded text-sm">
-                Student: <strong>{linkPrincipalStudent.name}</strong> (
-                {linkPrincipalStudent.admissionNumber})
+                Linking login for: <strong>{linkPrincipalStudent.name}</strong>{" "}
+                ({linkPrincipalStudent.admissionNumber})
               </div>
             )}
+            <div className="p-3 bg-primary/10 border border-primary/30 rounded-lg text-xs text-muted-foreground space-y-1">
+              <p className="font-semibold text-foreground">
+                How to get the student's Principal ID:
+              </p>
+              <ol className="list-decimal pl-4 space-y-1">
+                <li>Ask the student to log in to the portal.</li>
+                <li>
+                  They will see their Principal ID at the top of their
+                  dashboard.
+                </li>
+                <li>
+                  They click <strong>Copy</strong> and send it to you.
+                </li>
+                <li>Paste it below and click Link Account.</li>
+              </ol>
+            </div>
             <div>
               <Label>Student's Principal ID</Label>
               <Input
                 value={linkPrincipalInput}
                 onChange={(e) => setLinkPrincipalInput(e.target.value)}
-                placeholder="e.g. 2vxsx-fae"
+                placeholder="e.g. xxxxx-xxxxx-xxxxx-xxxxx-xxx"
                 data-ocid="student.link_principal.input"
               />
-              <p className="text-xs text-muted-foreground mt-1">
-                Ask the student to share their Principal ID from their login
-                screen.
-              </p>
             </div>
           </div>
           <DialogFooter>
@@ -2959,21 +2999,24 @@ function RegistrationRequestsPanel({
 
   async function handleApprove(req: RegistrationRequest) {
     const pidStr = parentIdInput[req.id.toString()] ?? "";
-    if (!pidStr.trim()) {
-      toast.error("Please enter a Parent Principal ID");
-      return;
-    }
     let pid: Principal;
     try {
-      pid = Principal.fromText(pidStr.trim());
+      // Use provided parent ID or fall back to anonymous principal if not provided
+      const { Principal: P } = await import("@icp-sdk/core/principal");
+      if (pidStr.trim()) {
+        pid = P.fromText(pidStr.trim());
+      } else {
+        // No parent linked yet -- use anonymous principal as placeholder
+        pid = P.anonymous();
+      }
     } catch {
-      toast.error("Invalid Principal ID format");
+      toast.error("Invalid Parent Principal ID format");
       return;
     }
     setApprovingId(req.id);
     try {
       await actor.approveStudentRegistration(req.id, pid);
-      toast.success("Registration approved!");
+      toast.success("Student approved and login linked!");
       loadRequests();
     } catch {
       toast.error("Failed to approve registration");
@@ -3057,22 +3100,32 @@ function RegistrationRequestsPanel({
                   </Badge>
                 </div>
                 {req.status === "pending" && (
-                  <div className="space-y-2 border-t pt-3">
-                    <Label className="text-xs text-muted-foreground">
-                      Parent Principal ID (to link parent account):
-                    </Label>
-                    <Input
-                      data-ocid={`registration.input.${idx + 1}`}
-                      placeholder="Paste parent's Principal ID"
-                      value={parentIdInput[req.id.toString()] ?? ""}
-                      onChange={(e) =>
-                        setParentIdInput((prev) => ({
-                          ...prev,
-                          [req.id.toString()]: e.target.value,
-                        }))
-                      }
-                      className="text-xs font-mono"
-                    />
+                  <div className="space-y-3 border-t pt-3">
+                    <div className="p-2 bg-green-950/20 border border-green-500/30 rounded text-xs text-green-400">
+                      ✅ Approving will automatically link this student's login
+                      to their account.
+                    </div>
+                    <div>
+                      <Label className="text-xs text-muted-foreground">
+                        Parent Principal ID{" "}
+                        <span className="text-muted-foreground/60">
+                          (optional)
+                        </span>
+                        :
+                      </Label>
+                      <Input
+                        data-ocid={`registration.input.${idx + 1}`}
+                        placeholder="Paste parent's Principal ID (optional)"
+                        value={parentIdInput[req.id.toString()] ?? ""}
+                        onChange={(e) =>
+                          setParentIdInput((prev) => ({
+                            ...prev,
+                            [req.id.toString()]: e.target.value,
+                          }))
+                        }
+                        className="text-xs font-mono"
+                      />
+                    </div>
                     <div className="flex gap-2">
                       <Button
                         size="sm"
@@ -3081,7 +3134,9 @@ function RegistrationRequestsPanel({
                         className="bg-primary hover:bg-primary/90 text-primary-foreground"
                         onClick={() => handleApprove(req)}
                       >
-                        {approvingId === req.id ? "Approving..." : "Approve"}
+                        {approvingId === req.id
+                          ? "Approving..."
+                          : "Approve & Link"}
                       </Button>
                       <Button
                         size="sm"

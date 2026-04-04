@@ -42,8 +42,7 @@ module {
     switch (state.userRoles.get(caller)) {
       case (?role) { role };
       case (null) {
-        // Unknown user is treated as guest (not registered yet)
-        #guest
+        Runtime.trap("User is not registered");
       };
     };
   };
