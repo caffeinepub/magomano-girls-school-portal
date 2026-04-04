@@ -1,39 +1,37 @@
 # Magomano Girls School Portal
 
 ## Current State
-Full-stack school portal with:
-- Role-based dashboards (Admin, Teacher, Parent, Student)
-- CBC grading system with color-coded levels
-- Fee management (structures + payments)
-- Events and announcements
-- Admin panel with CRUD for all data
-- Max 3 admins enforcement
-- Parent-student linkage via Principal IDs (admin manually links)
+The portal has a student enrollment request flow and an admin registration requests panel. Both are broken:
+- Students get "Failed to submit enrollment" when trying to request enrollment
+- Admins see "Failed to load registration requests" in their panel
+
+Root cause: `getUserRole` in `authorization/access-control.mo` calls `Runtime.trap("User is not registered")` when a user's Principal is not in the `userRoles` map. This happens because the frontend never calls `_initializeAccessControlWithSecret` to register users. As a result:
+1. Any new user who logs in and calls any function guarded by `AccessControl.hasPermission` or `AccessControl.isAdmin` crashes the entire call
+2. `getCallerUserProfile` traps → app fails to load for new users
+3. `getMyRegistrationRequest` traps → student can't check enrollment status
+4. `getAllRegistrationRequests` traps → admin can't load the requests panel
+5. `seedSampleData` traps → sample data never loads
 
 ## Requested Changes (Diff)
 
 ### Add
-- **Student self-registration form**: After login, a student (with no linked record) can fill in their name, admission number, and class, and submit a registration request.
-- **Parent link request form**: After login, a parent (with no linked students) can fill in their child's admission number and name, and submit a link request.
-- **Admin: Registration Requests panel**: Admin sees pending student registrations, can approve (which creates the student record linked to that principal) or reject.
-- **Admin: Parent Link Requests panel**: Admin sees pending parent link requests, can approve (links that parent's principal to the matching student) or reject.
-- **Student dashboard**: Shows the student's own grades and fee info once their account is linked.
-- Backend: `RegistrationRequest` and `ParentLinkRequest` types + full CRUD/approval functions.
-- Backend: `getMyStudentRecord()` for students to fetch their own record by Principal.
-- Backend: Student model updated to include optional `studentPrincipalId` field.
+- Frontend: call `_initializeAccessControlWithSecret` with the admin secret on every login, before any other backend call, to register the user in the access control system
+- Frontend: store/retrieve admin secret from env config
 
 ### Modify
-- Student dashboard: Previously showed blank; now shows self-registration prompt if no record found, or actual data if linked.
-- Parent dashboard: Add a "Request to be linked to my child" form if no students are linked yet.
-- Admin panel: Add two new tabs -- "Registration Requests" and "Parent Link Requests".
+- `authorization/access-control.mo`: Change `getUserRole` to return `#guest` instead of trapping when user is not in the map. This makes all permission checks safe for unregistered users.
+- `src/backend/main.mo`: Change `getCallerUserProfile` and `saveCallerUserProfile` to allow any non-anonymous user (not just `#user`), since new users won't be registered yet when they first call these
+- `src/backend/main.mo`: Change `getMyRegistrationRequest` to allow any non-anonymous caller (not just `#user`)
+- `src/backend/main.mo`: Change `seedSampleData` to allow the first-ever caller to seed (or only check isAdmin after they're registered)
+- `src/frontend/src/App.tsx`: Call `_initializeAccessControlWithSecret` right after login before loading the profile, using the `CAFFEINE_ADMIN_TOKEN` secret from env/config
 
 ### Remove
-- Nothing removed.
+- Nothing removed
 
 ## Implementation Plan
-1. Update backend Motoko with new types, state maps, and functions -- DONE
-2. Update backend.d.ts with new TypeScript interfaces -- DONE
-3. Update frontend App.tsx:
-   - Student dashboard: detect no linked record, show registration form; otherwise show grades/fees
-   - Parent dashboard: show link request form if no children linked
-   - Admin panel: add two new tabs for requests with approve/reject actions
+1. Fix `access-control.mo`: return `#guest` on unknown user (line ~46: replace `Runtime.trap(...)` with `#guest`)
+2. Fix `main.mo`: `getCallerUserProfile` - change guard from `hasPermission(#user)` to `!caller.isAnonymous()`
+3. Fix `main.mo`: `saveCallerUserProfile` - change guard to `!caller.isAnonymous()`, and auto-register the user as `#user` in `userRoles` if not already registered
+4. Fix `main.mo`: `getMyRegistrationRequest` - change guard from `hasPermission(#user)` to `!caller.isAnonymous()`
+5. Fix `main.mo`: `seedSampleData` - allow if caller is admin OR if no admin has been assigned yet (first run)
+6. Fix `frontend/App.tsx`: After identity is available, call `actor._initializeAccessControlWithSecret(adminSecret)` before `loadProfile()`. Get the secret from `src/frontend/env.json` or hardcoded as empty string (non-admins just get registered as `#user`)

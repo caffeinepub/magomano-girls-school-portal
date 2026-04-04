@@ -127,7 +127,7 @@ export default function App() {
       }
     } catch (e) {
       console.error(e);
-      toast.error("Failed to load profile");
+      toast.error((e as any)?.message ?? "Failed to load profile");
     } finally {
       setLoadingProfile(false);
     }
@@ -633,15 +633,20 @@ function UserContent({
             setFeePayments(allPayments);
           }
         } else if (profile.schoolRole === "student") {
-          const [myRecord, ev, ann, sub] = await Promise.all([
+          const [myRecord, ev, ann, sub, existingReq] = await Promise.all([
             actor!.getMyStudentRecord(),
             actor!.getAllEvents(),
             actor!.getAllAnnouncements(),
             actor!.getAllSubjects(),
+            actor!.getMyRegistrationRequest().catch(() => null),
           ]);
           setEvents(ev);
           setAnnouncements(ann);
           setSubjects(sub);
+          // If there is already a pending/approved request, mark enrollment as done
+          if (existingReq) {
+            setEnrollDone(true);
+          }
           if (myRecord) {
             setStudents([myRecord]);
             const [stGrades, stFees, stFs] = await Promise.all([
@@ -996,8 +1001,10 @@ function UserContent({
                         );
                         setEnrollDone(true);
                         toast.success("Enrollment request submitted!");
-                      } catch {
-                        toast.error("Failed to submit enrollment.");
+                      } catch (e: any) {
+                        toast.error(
+                          e?.message ?? "Failed to submit enrollment.",
+                        );
                       } finally {
                         setEnrollSubmitting(false);
                       }
@@ -1030,12 +1037,12 @@ function UserContent({
                       />
                     </div>
                     <div className="space-y-2">
-                      <Label htmlFor="enroll-class">Class / Form</Label>
+                      <Label htmlFor="enroll-class">Grade</Label>
                       <Input
                         id="enroll-class"
                         value={enrollClass}
                         onChange={(e) => setEnrollClass(e.target.value)}
-                        placeholder="e.g. Form 2 North"
+                        placeholder="e.g. Grade 9"
                         required
                       />
                     </div>
@@ -1611,7 +1618,7 @@ function StudentsPanel({
               <TableRow>
                 <TableHead>Name</TableHead>
                 <TableHead>Admission No.</TableHead>
-                <TableHead>Class/Form</TableHead>
+                <TableHead>Grade</TableHead>
                 <TableHead>Actions</TableHead>
               </TableRow>
             </TableHeader>
@@ -1725,11 +1732,11 @@ function StudentsPanel({
               />
             </div>
             <div>
-              <Label>Class / Form</Label>
+              <Label>Grade</Label>
               <Input
                 value={cls}
                 onChange={(e) => setCls(e.target.value)}
-                placeholder="e.g. Form 3A"
+                placeholder="e.g. Grade 9"
                 data-ocid="student.class.input"
               />
             </div>
@@ -2939,8 +2946,8 @@ function RegistrationRequestsPanel({
     try {
       const data = await actor.getAllRegistrationRequests();
       setRequests(data);
-    } catch {
-      toast.error("Failed to load registration requests");
+    } catch (e: any) {
+      toast.error(e?.message ?? "Failed to load registration requests");
     } finally {
       setLoading(false);
     }
@@ -3026,7 +3033,7 @@ function RegistrationRequestsPanel({
                   <div>
                     <div className="font-semibold">{req.name}</div>
                     <div className="text-sm text-muted-foreground">
-                      Admission: {req.admissionNumber} &bull; Class:{" "}
+                      Admission: {req.admissionNumber} &bull; Grade:{" "}
                       {req.studentClass}
                     </div>
                     <div className="text-xs text-muted-foreground mt-1">

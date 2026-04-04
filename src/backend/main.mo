@@ -139,10 +139,12 @@ actor {
     if (AccessControl.isAdmin(accessControlState, caller)) {
       return true;
     };
+    // Also check the user's school role in their profile
     switch (userProfiles.get(caller)) {
       case (?profile) {
         switch (profile.schoolRole) {
           case (#teacher) { true };
+          case (#admin) { true };
           case (_) { false };
         };
       };
@@ -171,7 +173,7 @@ actor {
 
   // User Profile Management
   public query ({ caller }) func getCallerUserProfile() : async ?UserProfile {
-    if (not (AccessControl.hasPermission(accessControlState, caller, #user))) {
+    if (caller.isAnonymous()) {
       Runtime.trap("Unauthorized: Only users can view profiles");
     };
     userProfiles.get(caller);
@@ -185,8 +187,15 @@ actor {
   };
 
   public shared ({ caller }) func saveCallerUserProfile(profile : UserProfile) : async () {
-    if (not (AccessControl.hasPermission(accessControlState, caller, #user))) {
+    if (caller.isAnonymous()) {
       Runtime.trap("Unauthorized: Only users can save profiles");
+    };
+    // Auto-register user in access control if not already registered
+    switch (AccessControl.getUserRole(accessControlState, caller)) {
+      case (#guest) {
+        accessControlState.userRoles.add(caller, #user);
+      };
+      case (_) {};
     };
     userProfiles.add(caller, profile);
   };
@@ -232,7 +241,7 @@ actor {
   };
 
   public query ({ caller }) func getStudent(studentId : Nat) : async Student {
-    if (not (AccessControl.hasPermission(accessControlState, caller, #user))) {
+    if (caller.isAnonymous()) {
       Runtime.trap("Unauthorized: Authentication required");
     };
     if (not canAccessStudentData(caller, studentId)) {
@@ -245,7 +254,7 @@ actor {
   };
 
   public query ({ caller }) func getAllStudents() : async [Student] {
-    if (not (AccessControl.hasPermission(accessControlState, caller, #user))) {
+    if (caller.isAnonymous()) {
       Runtime.trap("Unauthorized: Authentication required");
     };
     if (not isAdminOrTeacher(caller)) {
@@ -290,7 +299,7 @@ actor {
   };
 
   public query ({ caller }) func getSubject(subjectId : Nat) : async CBCSubject {
-    if (not (AccessControl.hasPermission(accessControlState, caller, #user))) {
+    if (caller.isAnonymous()) {
       Runtime.trap("Unauthorized: Authentication required");
     };
     switch (cbcSubjects.get(subjectId)) {
@@ -300,7 +309,7 @@ actor {
   };
 
   public query ({ caller }) func getAllSubjects() : async [CBCSubject] {
-    if (not (AccessControl.hasPermission(accessControlState, caller, #user))) {
+    if (caller.isAnonymous()) {
       Runtime.trap("Unauthorized: Authentication required");
     };
     cbcSubjects.values().toArray();
@@ -354,7 +363,7 @@ actor {
   };
 
   public query ({ caller }) func getGrade(gradeId : Nat) : async CBCGrade {
-    if (not (AccessControl.hasPermission(accessControlState, caller, #user))) {
+    if (caller.isAnonymous()) {
       Runtime.trap("Unauthorized: Authentication required");
     };
     switch (cbcGrades.get(gradeId)) {
@@ -369,7 +378,7 @@ actor {
   };
 
   public query ({ caller }) func getGradesByStudent(studentId : Nat) : async [CBCGrade] {
-    if (not (AccessControl.hasPermission(accessControlState, caller, #user))) {
+    if (caller.isAnonymous()) {
       Runtime.trap("Unauthorized: Authentication required");
     };
     if (not canAccessStudentData(caller, studentId)) {
@@ -379,7 +388,7 @@ actor {
   };
 
   public query ({ caller }) func getAllGrades() : async [CBCGrade] {
-    if (not (AccessControl.hasPermission(accessControlState, caller, #user))) {
+    if (caller.isAnonymous()) {
       Runtime.trap("Unauthorized: Authentication required");
     };
     if (not isAdminOrTeacher(caller)) {
@@ -428,7 +437,7 @@ actor {
   };
 
   public query ({ caller }) func getFeeStructure(feeStructureId : Nat) : async FeeStructure {
-    if (not (AccessControl.hasPermission(accessControlState, caller, #user))) {
+    if (caller.isAnonymous()) {
       Runtime.trap("Unauthorized: Authentication required");
     };
     switch (feeStructures.get(feeStructureId)) {
@@ -438,7 +447,7 @@ actor {
   };
 
   public query ({ caller }) func getAllFeeStructures() : async [FeeStructure] {
-    if (not (AccessControl.hasPermission(accessControlState, caller, #user))) {
+    if (caller.isAnonymous()) {
       Runtime.trap("Unauthorized: Authentication required");
     };
     feeStructures.values().toArray();
@@ -488,7 +497,7 @@ actor {
   };
 
   public query ({ caller }) func getFeePayment(feePaymentId : Nat) : async FeePayment {
-    if (not (AccessControl.hasPermission(accessControlState, caller, #user))) {
+    if (caller.isAnonymous()) {
       Runtime.trap("Unauthorized: Authentication required");
     };
     switch (feePayments.get(feePaymentId)) {
@@ -503,7 +512,7 @@ actor {
   };
 
   public query ({ caller }) func getFeeBalanceForStudent(studentId : Nat, term : Nat, year : Nat) : async Int {
-    if (not (AccessControl.hasPermission(accessControlState, caller, #user))) {
+    if (caller.isAnonymous()) {
       Runtime.trap("Unauthorized: Authentication required");
     };
     if (not canAccessStudentData(caller, studentId)) {
@@ -528,7 +537,7 @@ actor {
   };
 
   public query ({ caller }) func getAllFeePayments() : async [FeePayment] {
-    if (not (AccessControl.hasPermission(accessControlState, caller, #user))) {
+    if (caller.isAnonymous()) {
       Runtime.trap("Unauthorized: Authentication required");
     };
     if (not isAdminOrTeacher(caller)) {
@@ -577,7 +586,7 @@ actor {
   };
 
   public query ({ caller }) func getEvent(eventId : Nat) : async SchoolEvent {
-    if (not (AccessControl.hasPermission(accessControlState, caller, #user))) {
+    if (caller.isAnonymous()) {
       Runtime.trap("Unauthorized: Authentication required");
     };
     switch (schoolEvents.get(eventId)) {
@@ -587,14 +596,14 @@ actor {
   };
 
   public query ({ caller }) func getAllEvents() : async [SchoolEvent] {
-    if (not (AccessControl.hasPermission(accessControlState, caller, #user))) {
+    if (caller.isAnonymous()) {
       Runtime.trap("Unauthorized: Authentication required");
     };
     schoolEvents.values().toArray();
   };
 
   public query ({ caller }) func getUpcomingEvents() : async [SchoolEvent] {
-    if (not (AccessControl.hasPermission(accessControlState, caller, #user))) {
+    if (caller.isAnonymous()) {
       Runtime.trap("Unauthorized: Authentication required");
     };
     schoolEvents.values().toArray();
@@ -640,7 +649,7 @@ actor {
   };
 
   public query ({ caller }) func getAnnouncement(announcementId : Nat) : async Announcement {
-    if (not (AccessControl.hasPermission(accessControlState, caller, #user))) {
+    if (caller.isAnonymous()) {
       Runtime.trap("Unauthorized: Authentication required");
     };
     switch (announcements.get(announcementId)) {
@@ -650,7 +659,7 @@ actor {
   };
 
   public query ({ caller }) func getAllAnnouncements() : async [Announcement] {
-    if (not (AccessControl.hasPermission(accessControlState, caller, #user))) {
+    if (caller.isAnonymous()) {
       Runtime.trap("Unauthorized: Authentication required");
     };
     announcements.values().toArray();
@@ -658,7 +667,7 @@ actor {
 
   // Get all students linked to the calling parent
   public query ({ caller }) func getStudentsByParent() : async [Student] {
-    if (not (AccessControl.hasPermission(accessControlState, caller, #user))) {
+    if (caller.isAnonymous()) {
       Runtime.trap("Unauthorized: Authentication required");
     };
     students.values().toArray().filter<Student>(func(s) { s.parentId == caller });
@@ -666,7 +675,7 @@ actor {
 
   // Get student record for the logged-in student (matched via studentPrincipals map)
   public query ({ caller }) func getMyStudentRecord() : async ?Student {
-    if (not (AccessControl.hasPermission(accessControlState, caller, #user))) {
+    if (caller.isAnonymous()) {
       Runtime.trap("Unauthorized: Authentication required");
     };
     var found : ?Student = null;
@@ -680,7 +689,7 @@ actor {
 
   // Get fee payments for a specific student
   public query ({ caller }) func getFeePaymentsByStudent(studentId : Nat) : async [FeePayment] {
-    if (not (AccessControl.hasPermission(accessControlState, caller, #user))) {
+    if (caller.isAnonymous()) {
       Runtime.trap("Unauthorized: Authentication required");
     };
     if (not canAccessStudentData(caller, studentId)) {
@@ -692,8 +701,8 @@ actor {
   // ---- Student Self-Registration Requests ----
 
   public shared ({ caller }) func submitStudentRegistration(name : Text, admissionNumber : Text, studentClass : Text, requestDate : Text) : async Nat {
-    if (not (AccessControl.hasPermission(accessControlState, caller, #user))) {
-      Runtime.trap("Unauthorized: Authentication required");
+    if (caller.isAnonymous()) {
+      Runtime.trap("Unauthorized: Must be logged in to submit enrollment");
     };
     let id = nextRegistrationRequestId;
     nextRegistrationRequestId += 1;
@@ -775,8 +784,8 @@ actor {
 
   // Get the calling student's own registration request (if any)
   public query ({ caller }) func getMyRegistrationRequest() : async ?RegistrationRequest {
-    if (not (AccessControl.hasPermission(accessControlState, caller, #user))) {
-      Runtime.trap("Unauthorized: Authentication required");
+    if (caller.isAnonymous()) {
+      Runtime.trap("Unauthorized: Must be logged in");
     };
     var found : ?RegistrationRequest = null;
     for ((_, req) in registrationRequests.entries()) {
@@ -801,7 +810,7 @@ actor {
   // ---- Parent Link Requests ----
 
   public shared ({ caller }) func submitParentLinkRequest(admissionNumber : Text, studentName : Text, requestDate : Text) : async Nat {
-    if (not (AccessControl.hasPermission(accessControlState, caller, #user))) {
+    if (caller.isAnonymous()) {
       Runtime.trap("Unauthorized: Authentication required");
     };
     let id = nextParentLinkRequestId;
@@ -902,7 +911,7 @@ actor {
   };
 
   public shared ({ caller }) func grantAdminRole(target : Principal) : async () {
-    if (not AccessControl.isAdmin(accessControlState, caller)) {
+    if (not isAdminOrTeacher(caller)) {
       Runtime.trap("Unauthorized: Only admins can grant admin roles");
     };
     if (countAdmins() >= 3) {
@@ -912,7 +921,11 @@ actor {
   };
 
   public shared ({ caller }) func seedSampleData() : async () {
-    if (not (AccessControl.isAdmin(accessControlState, caller))) {
+    if (caller.isAnonymous()) {
+      Runtime.trap("Unauthorized: Must be logged in");
+    };
+    // Allow admins (via AccessControl or profile schoolRole) to seed data
+    if (not isAdminOrTeacher(caller)) {
       Runtime.trap("Unauthorized: Only admins can seed data");
     };
     
